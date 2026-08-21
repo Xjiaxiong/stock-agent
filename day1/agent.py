@@ -16,6 +16,29 @@ import urllib.request
 
 from tools import TOOLS
 
+
+def _load_dotenv() -> None:
+    """从当前目录向上查找 .env（项目根目录共享一份配置）。"""
+    current = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        env_path = os.path.join(current, ".env")
+        if os.path.exists(env_path):
+            with open(env_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+            return
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+
+
+_load_dotenv()
+
 DEEPSEEK_API_URL = os.environ.get("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions")
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 MAX_ITERATIONS = 10  # 防止模型无限循环调用工具
