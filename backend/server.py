@@ -20,10 +20,18 @@ from graph import build_graph
 
 app = FastAPI(title="Stock Research Agent API")
 
-# 允许前端 localhost:3000 跨域调用
+# 允许跨域的前端来源：本地默认 localhost:3000；
+# 部署后通过环境变量 CORS_ORIGINS 配置（逗号分隔多个来源，如 https://xx.vercel.app）
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        "CORS_ORIGINS", "http://localhost:3000"
+    ).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,0 +1,6 @@
+# 后端部署依赖（Render/Railway 会自动按此文件安装）
+fastapi>=0.115
+uvicorn>=0.30
+langgraph>=1.0
+mcp>=1.0,<2
+pydantic>=2.0

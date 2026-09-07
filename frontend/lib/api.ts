@@ -29,6 +29,15 @@ export const STEPS: { node: string; label: string }[] = [
 ];
 
 /**
+ * 后端地址：
+ * - 本地开发默认 http://localhost:8000
+ * - 部署到 Vercel 时配 NEXT_PUBLIC_API_URL=https://你的后端域名
+ *   （后端 CORS 也要把前端域名加进 CORS_ORIGINS）
+ */
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+/**
  * 发起研究请求并流式接收事件。
  *
  * @param company 公司名，例如 "贵州茅台"
@@ -40,7 +49,7 @@ export async function streamAnalysis(
   onEvent: (event: AnalysisEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch("http://localhost:8000/api/analysis", {
+  const res = await fetch(`${API_BASE}/api/analysis`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ company }),
