@@ -34,8 +34,10 @@ export const STEPS: { node: string; label: string }[] = [
  * - 部署到 Vercel 时配 NEXT_PUBLIC_API_URL=https://你的后端域名
  *   （后端 CORS 也要把前端域名加进 CORS_ORIGINS）
  */
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// 去掉末尾多余的 "/"，防止拼出 https://xxx.vercel.app//api/analysis 这类双斜杠
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+).replace(/\/+$/, "");
 
 /**
  * 发起研究请求并流式接收事件。
