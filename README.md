@@ -87,14 +87,20 @@ company（公司概况）→ stock（行情）→ news（新闻）→ financial�
 
 ## 10. Demo
 
-（待补充：2~5 分钟演示视频；部署后的公网地址）
+在线 Demo（部署于 Vercel）：
+
+- 前端：https://stock-agent-fontend.vercel.app
+- 后端 API：https://stock-agent-backend-blond.vercel.app（`GET /health` 健康检查）
+
+演示视频：待录制（2~5 分钟）。
 
 ## 11. Roadmap
 
+- [x] 前端部署 Vercel + 后端部署 Vercel（Python FastAPI，SSE 流式）
 - [ ] 真实数据源接入（A股行情/财务，评估中：同花顺官方金融 API）
 - [ ] 新闻数据源（评估东财/其他）
-- [ ] 前端部署 Vercel + 后端部署 Render/Railway
 - [ ] 用户访谈与商业模式验证（MARKET-VALIDATION.md）
+- [ ] Demo 视频
 
 ## 12. License
 
