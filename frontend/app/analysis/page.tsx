@@ -93,8 +93,8 @@ export default function AnalysisPage() {
           股票研究 Agent
         </h1>
         <p className="mt-2 text-zinc-500">
-          输入公司名称，Agent 将自动获取行情、新闻、财务数据并生成研究报告。
-          （当前为模拟数据演示）
+          输入公司名称，Agent 将自动获取行情、财务与估值数据并生成研究报告。
+          （行情/财务来自同花顺真实数据；新闻为占位内容）
         </p>
       </header>
 
