@@ -1,0 +1,6 @@
+# 开发 / CI 依赖（运行时不装）
+-r backend/requirements.txt
+pytest>=8.0
+
+# 学习模块专用（day5/ 与 mcp-server/）；线上函数不需要，故意不进根 requirements.txt
+mcp>=1.0,<2

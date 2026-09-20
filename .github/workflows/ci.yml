@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: 指标层 / 报告契约测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: 安装依赖
+        run: pip install -r requirements-dev.txt
+      - name: 跑单测（不联网，纯函数）
+        run: python -m pytest
+
+  frontend:
+    name: 前端类型检查 / Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+      - name: TypeScript 类型检查
+        run: pnpm exec tsc --noEmit
+      - name: ESLint
+        run: pnpm lint
