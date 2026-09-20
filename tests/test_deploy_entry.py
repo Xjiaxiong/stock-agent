@@ -5,6 +5,7 @@
 """
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -46,8 +47,6 @@ def test_entry_makes_market_importable():
 
 def test_vercel_json_bundles_market_into_function():
     """vercel.json 里的 includeFiles 一旦漏掉，线上复盘接口会直接不可用。"""
-    import json
-
     config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
     fn = config["functions"]["api/index.py"]
 
@@ -88,3 +87,60 @@ def test_report_dir_can_be_overridden_by_env(monkeypatch):
     finally:
         monkeypatch.delenv("DAILY_REPORT_DIR", raising=False)
         importlib.reload(dr)
+
+
+# ---------- market/ 打包与线上排障 ----------
+
+
+def load_server():
+    sys.path.insert(0, str(ROOT))
+    import backend.server as server  # noqa: PLC0415
+
+    return server
+
+
+def test_health_exposes_market_diagnostics():
+    """云端"复盘不可用"时，先看 /health 里的 market 解析结果。"""
+    from fastapi.testclient import TestClient
+
+    server = load_server()
+    body = TestClient(server.app).get("/health").json()
+
+    assert body["status"] == "ok"
+    market = body["market"]
+    assert market["available"] is True  # 本地仓库里 market/ 一定在
+    assert market["resolved_dir"].endswith("market")
+    assert market["entry_file"].endswith("server.py")
+    assert any(item["exists"] for item in market["candidates"])
+
+
+def test_diagnostics_endpoint_available():
+    from fastapi.testclient import TestClient
+
+    server = load_server()
+    response = TestClient(server.app).get("/api/diagnostics")
+
+    assert response.status_code == 200
+    assert "candidates" in response.json()["market"]
+
+
+def test_market_dir_env_takes_priority(monkeypatch):
+    server = load_server()
+    monkeypatch.setenv("MARKET_DIR", "/tmp/whatever-market")
+
+    assert server._market_candidates()[0] == "/tmp/whatever-market"
+
+
+def test_daily_review_error_carries_diagnostics(monkeypatch):
+    """线上报错必须自带"在哪、找过哪些路径"，否则只能靠猜。"""
+    server = load_server()
+    monkeypatch.setattr(server, "MARKET_AVAILABLE", False)
+    monkeypatch.setattr(server, "MARKET_IMPORT_ERROR", "No module named 'daily_review'")
+
+    event = list(server.run_daily_review("2026-09-18", False))[0]
+    payload = json.loads(event.removeprefix("data: ").strip())
+
+    assert payload["type"] == "error"
+    assert "No module named 'daily_review'" in payload["message"]
+    assert "查过的 market 目录" in payload["message"]
+    assert "入口" in payload["message"]

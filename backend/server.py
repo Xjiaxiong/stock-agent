@@ -13,11 +13,29 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # 每日复盘模块在仓库根目录的 market/ 下（与 backend/ 平级）。
-# 本地运行一定有；若某部署环境没把 market/ 打包进去，则接口返回明确错误而不影响其他功能。
-_MARKET_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "market"
-)
-if os.path.isdir(_MARKET_DIR) and _MARKET_DIR not in sys.path:
+# 本地运行一定有；云函数里如果项目根被指错一层（Vercel 常见坑），market/ 不会被上传，
+# 所以这里不写死一个路径，而是按"标准布局 → 环境变量 → 工作目录"逐个找，
+# 找不到时把"找过哪些位置"记下来，接口会把它一起返回，便于线上定位。
+_HERE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _market_candidates() -> list:
+    """按优先级列出 market/ 的候选位置（环境变量最优先）。"""
+    candidates = []
+    env_dir = os.environ.get("MARKET_DIR", "").strip()
+    if env_dir:
+        candidates.append(env_dir)
+    candidates += [
+        os.path.join(os.path.dirname(_HERE_DIR), "market"),  # 仓库根/market（标准布局）
+        os.path.join(os.getcwd(), "market"),  # 函数的当前工作目录
+        os.path.join(os.path.dirname(os.getcwd()), "market"),  # 工作目录的上一层
+    ]
+    return [os.path.abspath(path) for path in candidates]
+
+
+_MARKET_CANDIDATES = _market_candidates()
+_MARKET_DIR = next((path for path in _MARKET_CANDIDATES if os.path.isdir(path)), "")
+if _MARKET_DIR and _MARKET_DIR not in sys.path:
     sys.path.insert(0, _MARKET_DIR)
 
 try:
@@ -28,6 +46,33 @@ try:
 except Exception as _exc:  # pragma: no cover - 仅在缺模块的部署环境触发
     MARKET_AVAILABLE = False
     MARKET_IMPORT_ERROR = str(_exc)
+
+
+def market_diagnostics() -> dict:
+    """market/ 到底找没找到、函数跑在哪——线上排障用，不含任何密钥。"""
+    return {
+        "available": MARKET_AVAILABLE,
+        "error": MARKET_IMPORT_ERROR,
+        "resolved_dir": _MARKET_DIR or None,
+        "candidates": [
+            {"path": path, "exists": os.path.isdir(path)} for path in _MARKET_CANDIDATES
+        ],
+        "entry_file": os.path.abspath(__file__),
+        "cwd": os.getcwd(),
+        "python": sys.version.split()[0],
+    }
+
+
+def _market_error_detail() -> str:
+    """给用户的报错里附上诊断信息，省掉一次"猜哪里没打包"。"""
+    diag = market_diagnostics()
+    tried = "、".join(
+        f"{item['path']}({'有' if item['exists'] else '无'})" for item in diag["candidates"]
+    )
+    return (
+        f"{diag['error']}｜入口 {diag['entry_file']}，工作目录 {diag['cwd']}，"
+        f"查过的 market 目录：{tried}"
+    )
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -105,7 +150,14 @@ def run_analysis(company: str):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """健康检查。顺带返回 market/ 的解析结果：云函数上"复盘不可用"时先看这里。"""
+    return {"status": "ok", "market": market_diagnostics()}
+
+
+@app.get("/api/diagnostics")
+def diagnostics():
+    """部署排障：函数跑在哪、market/ 找没找到、找过哪些路径。"""
+    return {"market": market_diagnostics()}
 
 
 @app.get("/api/metrics")
@@ -135,7 +187,7 @@ def run_daily_review(trade_date: str, fresh: bool):
     if not MARKET_AVAILABLE:
         yield _sse({
             "type": "error",
-            "message": f"每日复盘模块不可用（该部署未包含 market/ 目录）：{MARKET_IMPORT_ERROR}",
+            "message": f"每日复盘模块不可用（该部署未包含 market/ 目录）：{_market_error_detail()}",
         })
         return
     try:

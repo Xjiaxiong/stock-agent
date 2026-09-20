@@ -235,6 +235,21 @@ vercel.json      functions.api/index.py：maxDuration 60 + includeFiles: "market
    这时前端会收到失败提示，重试即可。
 4. 部署后先 `curl https://<后端域名>/health` 验证，再打开前端页面走一次复盘。
 
+#### 复盘接口报"每日复盘模块不可用（该部署未包含 market/ 目录）"
+
+这是打包边界问题，不是代码问题：函数里没有 `market/`，就 import 不到 `daily_review`。
+先 `curl https://<后端域名>/health`（或 `/api/diagnostics`），按返回的
+`market.entry_file` 与候选目录判断：
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| `entry_file` 形如 `/var/task/server.py` | 函数入口还停在 `backend/` 那一层，Root Directory 没改 | Settings → Root Directory 改成仓库根（留空或 `.`），Redeploy |
+| `entry_file` 形如 `/var/task/backend/server.py`，但候选目录全 `exists: false` | 入口对了，`market/` 没进函数包 | 确认部署的是最新提交，且 `vercel.json` 的 `includeFiles` 含 `market/**`，然后 Redeploy |
+| `available: true` | 正常 | — |
+
+复盘接口的错误信息里也会带同样的诊断（入口文件 / 工作目录 / 查过的 market 目录），
+前端弹出的报错里就能直接看到。若 `market/` 不在标准位置，可用 `MARKET_DIR` 显式指定。
+
 ### 后端（其他平台）
 
 - Render：`render.yaml` 蓝图（`rootDir: backend`，`startCommand: uvicorn server:app`）。
