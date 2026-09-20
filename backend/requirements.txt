@@ -1,6 +1,6 @@
-# 后端部署依赖（Render/Railway 会自动按此文件安装）
+# 后端部署依赖（Render / Docker 按此文件安装；Vercel 用仓库根目录的 requirements.txt，
+# 两边内容保持一致）。mcp 只有 day5/ 与 mcp-server/ 学习模块用得到，放在 requirements-dev.txt。
 fastapi>=0.115
 uvicorn>=0.30
 langgraph>=1.0
-mcp>=1.0,<2
 pydantic>=2.0

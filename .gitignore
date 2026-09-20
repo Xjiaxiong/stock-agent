@@ -8,3 +8,19 @@ venv/
 node_modules/
 .next/
 out/
+
+# 每日盘面快照属于本地数据，不入库
+market/snapshots/*.json
+market/snapshots/*.md
+!market/snapshots/.gitkeep
+market/reports/*.json
+market/reports/*.md
+!market/reports/.gitkeep
+
+# 个人文档（简历等）不入库
+docs/
+
+# 运行期产物
+logs/
+market/logs/
+.pytest_cache/

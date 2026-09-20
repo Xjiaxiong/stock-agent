@@ -1,0 +1,6 @@
+# Vercel / 运行期依赖：项目根目录放一份，Vercel 的 Python 函数只从项目根安装依赖。
+# 这里不包含 mcp —— 只有 day5/ 与 mcp-server/ 学习模块用到，装在 requirements-dev.txt 里。
+fastapi>=0.115
+uvicorn>=0.30
+langgraph>=1.0
+pydantic>=2.0
