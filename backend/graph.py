@@ -28,6 +28,16 @@ from tools import (
     get_stock_price,
 )
 
+# 共享的 LLM 客户端（统一重试 + 记用量日志）在 market/ 下。
+# 只有本地开发会把 market/ 一起带着；线上若只打包 backend/，这里退化成文件内的直连实现。
+try:
+    sys.path.insert(
+        0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "market")
+    )
+    from llm_client import call as _shared_llm_call
+except Exception:  # pragma: no cover - 取决于部署时是否打包 market/
+    _shared_llm_call = None
+
 
 def _load_dotenv() -> None:
     current = os.path.dirname(os.path.abspath(__file__))
@@ -71,6 +81,10 @@ class ResearchState(TypedDict):
 
 def _call_llm(messages: list, max_tokens: int = 2000) -> str:
     """调用 DeepSeek，返回文本（带 2 次重试）。"""
+    if _shared_llm_call is not None:
+        # 共享客户端已经包含重试与用量日志，直接用
+        return _shared_llm_call(messages, source="analysis", max_tokens=max_tokens, timeout=120)
+
     api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("缺少 DEEPSEEK_API_KEY，请在项目根目录 .env 中配置")
@@ -170,7 +184,8 @@ def _data_brief(state: ResearchState) -> str:
 
 def analysis_node(state: ResearchState) -> dict:
     print("  -> 节点: analysis（LLM）")
-    prompt = f"""你是股票基本面分析师。基于以下数据（模拟数据），输出 JSON：
+    prompt = f"""你是股票基本面分析师。基于以下数据（真实行情/财务来自同花顺 API；
+新闻为占位内容，注意甄别，不要引用占位新闻中的具体数字），输出 JSON：
 {{
   "summary": "一段综合总结",
   "fundamentals": ["基本面要点1", "要点2"],
@@ -279,14 +294,15 @@ def report_node(state: ResearchState) -> dict:
         lines.append(f"- {r}")
 
     lines += ["", "## 9. 信息来源", ""]
-    lines += ["- 行情/新闻/财务/公司信息：模拟数据（产品演示用，后续接真实数据源）"]
+    lines += ["- 行情/财务/公司信息：同花顺金融数据 API（真实数据）"]
+    lines += ["- 新闻：占位内容（同花顺公开能力不含新闻原文，不代表真实事件）"]
     if news:
         srcs = sorted({item["source"] for item in news})
         lines.append(f"- 新闻来源：{'、'.join(srcs)}")
     lines += ["", "## 10. Agent 总结", ""]
-    lines.append(analysis.get("summary", "综合分析完成（模拟数据）。"))
+    lines.append(analysis.get("summary", "综合分析完成。"))
     lines.append("")
-    lines.append("> 免责声明：本报告基于模拟数据自动生成，不构成投资建议。")
+    lines.append("> 免责声明：本报告基于同花顺真实行情/财务数据自动生成，不构成投资建议。")
 
     return {"report": "\n".join(lines)}
 
