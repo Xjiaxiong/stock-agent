@@ -74,9 +74,9 @@ def _market_error_detail() -> str:
         f"查过的 market 目录：{tried}"
     )
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from graph import build_graph
@@ -256,4 +256,30 @@ def daily_review(req: DailyReviewRequest):
         run_daily_review(trade_date, req.fresh),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ---------- 兜底：任何没匹配上的路径都自报"我收到了什么" ----------
+# 注册在所有路由之后，所以不会影响正常接口。云函数上最容易踩的坑是
+# "rewrite 把原始路径吃掉了"，这时所有接口都是 404，光看 FastAPI 的
+# {"detail":"Not Found"} 完全不知道函数收到了哪条路径——这里把它回显出来。
+@app.api_route(
+    "/{unknown_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    include_in_schema=False,
+)
+def fallback(unknown_path: str, request: Request):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "detail": "没有匹配的路由",
+            "received_path": request.scope.get("path"),
+            "raw_url": str(request.url),
+            "hint": (
+                "本地开发请直接访问 /health、/api/analysis、/api/daily-review。"
+                "若这是 Vercel 部署：确认入口是 api/index.py、"
+                "vercel.json 的 rewrites 目标带路径捕获（/api/index/$1），"
+                "且项目 Root Directory 指向仓库根。"
+            ),
+        },
     )

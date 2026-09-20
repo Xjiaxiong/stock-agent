@@ -22,6 +22,36 @@ for rel in ("market", "backend"):
     if os.path.isdir(path) and path not in sys.path:
         sys.path.insert(0, path)
 
-from server import app  # noqa: E402  （Vercel 靠模块级 app 变量识别 ASGI 应用）
+from server import app as server_app  # noqa: E402
+
+
+class StripInternalPrefix:
+    """剥掉 Vercel rewrite 带进来的内部路径前缀，让 FastAPI 看到用户请求的真实路径。
+
+    Vercel 把 `/(.*)` 重写到函数时，函数拿到的路径不一定是原始路径（实测遇到的就是
+    全部路由 404，因为函数收到的是 rewrite 目标 `/api/index`）。这里把三种形态都兼容：
+
+        /health            有的部署直接透传原始路径 → 原样放行
+        /api/index/health  rewrite destination 带 $1 捕获 → 剥成 /health
+        /api/index         没有捕获时只能落到 /（会命中 server.py 里的 404 兜底并说明原因）
+    """
+
+    PREFIX = "/api/index"
+
+    def __init__(self, asgi_app):
+        self.asgi_app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            path = scope.get("path") or "/"
+            if path == self.PREFIX or path.startswith(f"{self.PREFIX}/"):
+                new_path = path[len(self.PREFIX) :] or "/"
+                scope = dict(scope, path=new_path)
+                if isinstance(scope.get("raw_path"), (bytes, bytearray)):
+                    scope["raw_path"] = new_path.encode()
+        await self.asgi_app(scope, receive, send)
+
+
+app = StripInternalPrefix(server_app)
 
 __all__ = ["app"]

@@ -26,7 +26,11 @@ def load_entry():
 
 def test_entry_exposes_fastapi_app_with_all_routes():
     entry = load_entry()
-    routes = {route.path for route in entry.app.routes if hasattr(route, "path")}
+    # 入口外面可能包了中间件（剥 rewrite 前缀那层），逐层剥到 FastAPI 应用
+    inner = entry.app
+    while not hasattr(inner, "routes"):
+        inner = inner.asgi_app
+    routes = {route.path for route in inner.routes if hasattr(route, "path")}
 
     assert {
         "/health",
@@ -52,6 +56,31 @@ def test_vercel_json_bundles_market_into_function():
 
     assert "market/**" in fn["includeFiles"]
     assert fn["maxDuration"] <= 60  # Hobby 上限就是 60s
+
+
+def test_vercel_rewrite_keeps_original_path():
+    """rewrite 目标必须带 $1 捕获，否则函数拿不到原始路径，所有接口都会 404。"""
+    config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    destination = config["rewrites"][0]["destination"]
+
+    assert destination.endswith("$1"), destination
+
+
+def test_entry_strips_internal_rewrite_prefix():
+    """函数收到的路径三种形态都要能归一化成真实路由。"""
+    import asyncio
+
+    entry = load_entry()
+    seen = []
+
+    async def downstream(scope, receive, send):
+        seen.append(scope["path"])
+
+    wrapper = entry.StripInternalPrefix(downstream)
+    for incoming in ("/health", "/api/index/health", "/api/index", "/api/index/api/daily-review"):
+        asyncio.run(wrapper({"type": "http", "path": incoming}, None, None))
+
+    assert seen == ["/health", "/health", "/", "/api/daily-review"]
 
 
 def test_report_save_failure_does_not_raise(monkeypatch):
@@ -122,6 +151,17 @@ def test_diagnostics_endpoint_available():
 
     assert response.status_code == 200
     assert "candidates" in response.json()["market"]
+
+
+def test_unknown_route_echoes_received_path():
+    """Vercel 上整站 404 时，兜底路由要告诉运维"函数到底收到了哪条路径"。"""
+    from fastapi.testclient import TestClient
+
+    server = load_server()
+    body = TestClient(server.app).get("/nope").json()
+
+    assert body["received_path"] == "/nope"
+    assert "Vercel" in body["hint"]
 
 
 def test_market_dir_env_takes_priority(monkeypatch):
